@@ -1,9 +1,9 @@
 ﻿pipeline {
   agent any
   environment {
-    DOCKERHUB_USER = 'YOUR_DOCKERHUB_USERNAME'
-    IMAGE_NAME     = 'YOUR_DOCKERHUB_USERNAME/django-app'
-    GITHUB_USER    = 'YOUR_GITHUB_USERNAME'
+    DOCKERHUB_USER = 'nimnajudy'
+    IMAGE_NAME     = 'nimnajudy/django-app'
+    GITHUB_USER    = 'nimnadev'
   }
   stages {
     stage('Checkout') {
@@ -50,7 +50,7 @@
           passwordVariable: 'GPASS'
         )]) {
           sh 'rm -rf django-k8s'
-          sh 'git clone https://\:\@github.com/\/django-k8s.git'
+          sh 'git clone https://\:\@github.com/nimnadev/django-k8s.git'
           sh 'sed -i "s|django-app:.*|django-app:\|g" django-k8s/deployment.yaml'
           sh 'cd django-k8s && git config user.email "jenkins@ci.com"'
           sh 'cd django-k8s && git config user.name "Jenkins"'
