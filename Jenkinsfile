@@ -1,81 +1,68 @@
-﻿pipeline {
-    agent any
-
-    stages {
-
-        stage('Clone Repository') {
-            steps {
-                git branch: 'main',
-                    url: 'https://github.com/nimnadev/django-cicd-server.git'
-            }
-        }
-
-        stage('Install Dependencies') {
-            steps {
-                sh '''
-                    python3 -m venv venv
-                    . venv/bin/activate
-                    pip install --upgrade pip
-                    pip install -r requirements.txt
-                '''
-            }
-        }
-
-        stage('Run Tests') {
-            steps {
-                sh '''
-                    . venv/bin/activate
-                    python manage.py test --verbosity=2
-                '''
-            }
-        }
-
-        stage('SonarQube Analysis') {
-            steps {
-                withSonarQubeEnv('SonarQube') {
-                    sh '/opt/sonar-scanner/bin/sonar-scanner'
-                }
-            }
-        }
-
-        stage('Quality Gate') {
-            steps {
-                timeout(time: 3, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: true
-                }
-            }
-        }
-
-        stage('Build Docker Image') {
-            steps {
-                sh 'docker build -t django-cicd-app:latest .'
-            }
-        }
-
-        stage('Deploy Container') {
-            steps {
-                sh '''
-                    docker stop django-cicd-container || true
-                    docker rm django-cicd-container || true
-                    docker run -d \
-                        --name django-cicd-container \
-                        -p 8000:8000 \
-                        --restart unless-stopped \
-                        django-cicd-app:latest
-                '''
-            }
-        }
+pipeline {
+  agent any
+  environment {
+    DOCKERHUB_USER = 'nimnajudy'
+    IMAGE_NAME     = 'nimnajudy/django-app'
+    GITHUB_USER    = 'nimnadev'
+  }
+  stages {
+    stage('Checkout') {
+      steps { checkout scm }
     }
-
-    post {
-        success {
-            echo 'Pipeline completed successfully!'
+    stage('SonarQube Scan') {
+      steps {
+        withSonarQubeEnv('SonarQube') {
+          sh 'sonar-scanner'
         }
-        failure {
-            echo 'Pipeline failed!'
-        }
-        always {
-            sh 'rm -rf venv || true'
-        }
+      }
     }
+    stage('Quality Gate') {
+      steps {
+        timeout(time: 2, unit: 'MINUTES') {
+          waitForQualityGate abortPipeline: true
+        }
+      }
+    }
+    stage('Build Docker Image') {
+      steps {
+        sh 'docker build -t \:\ .'
+      }
+    }
+    stage('Push to Docker Hub') {
+      steps {
+        withCredentials([usernamePassword(
+          credentialsId: 'dockerhub-creds',
+          usernameVariable: 'DUSER',
+          passwordVariable: 'DPASS'
+        )]) {
+          sh 'echo \ | docker login -u \ --password-stdin'
+          sh 'docker push \:\'
+          sh 'docker tag \:\ \:latest'
+          sh 'docker push \:latest'
+        }
+      }
+    }
+    stage('Update K8s Manifest') {
+      steps {
+        withCredentials([usernamePassword(
+          credentialsId: 'github-creds',
+          usernameVariable: 'GUSER',
+          passwordVariable: 'GPASS'
+        )]) {
+          sh 'rm -rf django-k8s'
+          sh 'git clone https://\:\@github.com/nimnadev/django-k8s.git'
+          sh 'sed -i "s|django-app:.*|django-app:\|g" django-k8s/deployment.yaml'
+          sh 'cd django-k8s && git config user.email "jenkins@ci.com"'
+          sh 'cd django-k8s && git config user.name "Jenkins"'
+          sh 'cd django-k8s && git add deployment.yaml'
+          sh 'cd django-k8s && git commit -m "Update image to \"'
+          sh 'cd django-k8s && git push origin main'
+        }
+      }
+    }
+  }
+  post {
+    success { echo 'Done! ArgoCD will deploy shortly.' }
+    failure { echo 'Pipeline failed. Check stage logs.' }
+  }
 }
