@@ -1,21 +1,17 @@
 pipeline {
-  agent any
-
+  agent { label 'django-cicd' }
   environment {
     DOCKERHUB_USER = 'nimnajudy'
     IMAGE_NAME     = 'nimnajudy/django-app'
     GITHUB_USER    = 'nimnadev'
     BUILD_TAG      = "v${BUILD_NUMBER}"
   }
-
   stages {
-
     stage('Checkout') {
       steps {
         checkout scm
       }
     }
-
     stage('SonarQube Scan') {
       steps {
         withSonarQubeEnv('SonarQube') {
@@ -23,7 +19,6 @@ pipeline {
         }
       }
     }
-
     stage('Quality Gate') {
       steps {
         timeout(time: 2, unit: 'MINUTES') {
@@ -31,13 +26,11 @@ pipeline {
         }
       }
     }
-
     stage('Build Docker Image') {
       steps {
         sh "docker build -t ${IMAGE_NAME}:${BUILD_TAG} ."
       }
     }
-
     stage('Push to Docker Hub') {
       steps {
         withCredentials([usernamePassword(
@@ -52,7 +45,6 @@ pipeline {
         }
       }
     }
-
     stage('Update K8s Manifest') {
       steps {
         withCredentials([usernamePassword(
@@ -75,7 +67,6 @@ pipeline {
       }
     }
   }
-
   post {
     success {
       echo 'Done! ArgoCD will deploy shortly.'
