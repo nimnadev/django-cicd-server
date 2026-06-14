@@ -45,16 +45,12 @@ pipeline {
         }
       }
     }
-    stage('Update K8s Manifest') {
+     stage('Update K8s Manifest') {
       steps {
-        withCredentials([usernamePassword(
-          credentialsId: 'github-creds',
-          usernameVariable: 'GUSER',
-          passwordVariable: 'GPASS'
-        )]) {
+        withCredentials([string(credentialsId: 'github-token', variable: 'GPASS')]) {
           sh """
             rm -rf django-k8s
-            git clone https://${GUSER}:${GPASS}@github.com/nimnadev/django-k8s.git
+            git clone https://${GITHUB_USER}:${GPASS}@github.com/nimnadev/django-k8s.git
             sed -i "s|image: ${IMAGE_NAME}:.*|image: ${IMAGE_NAME}:${BUILD_TAG}|g" django-k8s/deployment.yaml
             cd django-k8s
             git config user.email "jenkins@ci.com"
